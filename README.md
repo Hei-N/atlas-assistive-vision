@@ -1,3 +1,17 @@
+## Download for macOS
+
+A self-contained Apple Silicon build is available.
+
+[Download Atlas v0.1.0 for macOS](https://github.com/Hei-N/atlas-assistive-vision/releases/tag/v0.1.0)
+
+- Apple Silicon only
+- No Python installation required
+- YOLOv8s bundled
+- Camera permission required on first launch
+- Not yet signed or notarized by Apple
+
+> On first launch, macOS may block the app because it is not notarized. Right-click `Atlas.app` → **Open** → **Open**.
+
 # Atlas
 
 Assistive computer-vision prototype that turns street hazards into short, prioritized audio alerts for blind and low-vision pedestrians.
