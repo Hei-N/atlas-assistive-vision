@@ -10,7 +10,7 @@ A self-contained Apple Silicon build is available.
 - Camera permission required on first launch
 - Not yet signed or notarized by Apple
 
-> On first launch, macOS may block the app because it is not notarized. Right-click `Atlas.app` → **Open** → **Open**.
+> On first launch, macOS may block the app because it is not notarized. Right-click `Atlas.app` → **Open**. More instructions in the downloadable link.
 
 # Atlas
 
