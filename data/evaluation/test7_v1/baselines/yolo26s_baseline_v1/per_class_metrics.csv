@@ -1,0 +1,7 @@
+class_name,ground_truth_count,prediction_count,true_positives,false_positives,false_negatives,precision,precision_defined,recall,recall_defined,f1,f1_defined,mean_matched_iou,mean_matched_iou_defined,mean_confidence_true_positives,mean_confidence_true_positives_defined,mean_confidence_false_positives,mean_confidence_false_positives_defined
+bicycle,4,0,0,0,4,,False,0.0,True,,False,,False,,False,,False
+bus,6,5,5,0,1,1.0,True,0.8333333333333334,True,0.9090909090909091,True,0.6495294972906533,True,0.81114,True,,False
+car,139,99,70,29,69,0.7070707070707071,True,0.5035971223021583,True,0.588235294117647,True,0.7047197833334387,True,0.7425557142857143,True,0.7115241379310345,True
+motorcycle,0,0,0,0,0,,False,,False,,False,,False,,False,,False
+person,3,3,1,2,2,0.3333333333333333,True,0.3333333333333333,True,0.3333333333333333,True,0.6317119393556538,True,0.5305,True,0.6512,True
+truck,6,1,1,0,5,1.0,True,0.16666666666666666,True,0.2857142857142857,True,0.6664027492335164,True,0.8434,True,,False

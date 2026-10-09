@@ -1,0 +1,627 @@
+# Atlas Phase 1 configuration
+# All tunable parameters for detection, regions, and display.
+
+model:
+  # Pretrained YOLO model (Ultralytics). Downloaded automatically on first
+  # run if not already present locally. Using the "small" (s) variant
+  # rather than "nano" (n) -- meaningfully better at detecting bicycles
+  # and other thin/small objects, at some cost to frame rate (still
+  # real-time on typical hardware).
+  name: "yolov8s.pt"
+  confidence_threshold: 0.50
+
+# Classes we care about, expressed as COCO class IDs -> canonical names.
+# Only detections matching these IDs are kept; everything else is filtered out.
+classes:
+  0: person
+  1: bicycle
+  3: motorcycle
+  2: car
+  5: bus
+  7: truck
+
+# Region boundaries as fractions of frame width (0.0 - 1.0).
+# A point with x < left_boundary  -> "left"
+# A point with x > right_boundary -> "right"
+# Otherwise                       -> "center"
+regions:
+  left_boundary: 0.33
+  right_boundary: 0.66
+
+# Attention zone: centered rectangle expressed as fractions of frame
+# width/height. Used to highlight the "zone of interest" in the frame.
+attention_zone:
+  x_min_fraction: 0.25
+  x_max_fraction: 0.75
+  y_min_fraction: 0.20
+  y_max_fraction: 0.80
+
+display:
+  window_name: "Atlas - Pedestrian Hazard Awareness (Phase 1)"
+
+# Cross-frame object tracking (Milestone 2): assigns a stable ID to each
+# object and derives movement direction / approaching-moving-away-stationary
+# status from its position and bounding-box size history.
+tracking:
+  # A detection matches an existing track of the same class if EITHER of
+  # the next two thresholds passes (not both required):
+
+  # Max centroid movement (raw pixels) between frames. This is an absolute
+  # pixel value, so it should scale up for higher-resolution camera feeds
+  # (e.g. a 3000px-wide frame needs a larger value than a 640px-wide one).
+  max_match_distance_px: 150
+  # Min bounding-box overlap (IoU) between frames. Resolution-independent,
+  # so it's the more robust of the two signals and the primary defense
+  # against ID churn on high-resolution frames.
+  min_match_iou: 0.3
+
+  # Frames a track may go unmatched (occlusion, a confidence dip near
+  # model.confidence_threshold, brief detector flicker) before it's
+  # dropped and a later reappearance gets a new ID.
+  max_disappeared_frames: 20
+
+  history_length: 10
+  stationary_threshold_px: 4
+  size_change_threshold_fraction: 0.05
+
+# Milestone 3A: 2D image-space trajectory estimation. Velocity is smoothed
+# via least-squares linear regression over recent center points (see
+# src/trajectory_predictor.py docstring for why regression was chosen over
+# a plain moving average). Predictions are in image pixels only -- they
+# are NOT a real-world distance/speed/collision determination (no depth
+# or GPS involved), and are only computed/drawn in --debug mode.
+trajectory:
+  # Max most-recent center points used for the regression fit, independent
+  # of tracking.history_length (must be <= it, since TrajectoryPredictor
+  # can't use history the tracker didn't retain).
+  trajectory_history_length: 10
+  # Minimum samples required before a trajectory is computed at all. Kept
+  # above 2 so the regression genuinely averages multiple observations
+  # rather than degenerating to a 2-point slope.
+  trajectory_min_observations: 5
+  # How many frames ahead to project the constant-velocity prediction.
+  trajectory_prediction_horizon_frames: 10
+  # Below this speed (pixels/frame), classify "stationary" and skip
+  # drawing a long prediction arrow.
+  trajectory_stationary_threshold_px_per_frame: 1.5
+  # A track not freshly matched for more than this many frames yields an
+  # invalid ("unknown") prediction instead of extrapolating stale data.
+  trajectory_max_missed_frames: 5
+  # Debug-only: draw a short trail of each object's recent center points.
+  trajectory_draw_history: true
+  trajectory_history_points_to_draw: 5
+
+# Milestone 3B: image-space "pedestrian corridor" -- an approximate walking
+# path ahead of the camera wearer, expressed as normalized frame fractions
+# so it scales correctly across resolutions. Used to test whether a
+# tracked object's predicted trajectory (Milestone 3A) intersects it. This
+# is an image-space warning precursor, not a real-world collision
+# determination.
+corridor:
+  # Bottom edge: the middle 30% of frame width (0.35-0.65), at the very
+  # bottom of the frame (y=1.0) -- roughly where a forward walking path
+  # would appear closest to the camera.
+  corridor_bottom_left_x: 0.35
+  corridor_bottom_right_x: 0.65
+  corridor_bottom_y: 1.0
+  # Top edge: narrows to a 10%-wide band (0.45-0.55), consistent with
+  # forward perspective narrowing toward the horizon. Stops at y=0.55
+  # (short of the true horizon/frame top) to avoid a degenerate
+  # near-zero-width apex right at the top of the frame.
+  corridor_top_left_x: 0.45
+  corridor_top_right_x: 0.55
+  corridor_top_y: 0.55
+  # Debug-only: draw the corridor outline and intersection markers.
+  corridor_draw_enabled: true
+  intersection_marker_radius: 6
+
+# Phase 4: camera-motion estimation. Estimates how much the camera/wearer's
+# head moved between consecutive frames, from sparse optical flow on
+# background feature points fit with RANSAC. Image-plane pixels/degrees
+# only -- not meters, not physical speed, not GPS, not a 3D pose. This
+# phase only produces and visualizes the estimate; it does NOT yet correct
+# object trajectories with it. If this whole section is missing, motion
+# estimation is simply disabled (same as enabled: false).
+motion_estimation:
+  enabled: true
+  # Reserved for future estimator selection (e.g. an IMU-based or
+  # visual+IMU fusion estimator); only sparse_optical_flow exists today.
+  method: sparse_optical_flow
+
+  # cv2.goodFeaturesToTrack corner-detection parameters.
+  max_features: 400
+  quality_level: 0.01
+  min_distance_px: 8
+  block_size: 7
+
+  # cv2.calcOpticalFlowPyrLK pyramidal Lucas-Kanade parameters.
+  lk_window_size: 21
+  lk_max_level: 3
+
+  # cv2.estimateAffinePartial2D RANSAC parameters, and the minimum
+  # tracked/inlier counts required before an estimate is trusted.
+  ransac_threshold_px: 3.0
+  min_tracked_features: 20
+  min_inliers: 12
+
+  # Below this confidence (but still passing the checks above), the
+  # estimate's status is "LOW_CONFIDENCE" rather than "VALID" -- a
+  # labeling threshold only, it does not reject the estimate. Independent
+  # of motion_compensation.min_camera_confidence below, which decides
+  # whether compensation actually trusts an estimate enough to apply it.
+  low_confidence_threshold: 0.6
+  # Reject the estimate ("implausibly large frame-to-frame
+  # transformation") if the raw translation magnitude or rotation exceeds
+  # these. Generous heuristic bounds meant to catch degenerate RANSAC
+  # fits, not to penalize genuinely fast camera motion -- not
+  # scientifically derived.
+  max_translation_px: 250
+  max_rotation_degrees: 30
+
+  # Exclude tracked-object boxes from feature detection, so a moving
+  # person/vehicle can't dominate the background-motion estimate.
+  exclude_foreground: true
+  exclusion_padding_px: 10
+
+  # Exponential smoothing over dx/dy/rotation_degrees (see
+  # src/motion/visual_motion_estimator.py for the exact formula).
+  smoothing_enabled: true
+  smoothing_alpha: 0.25
+  max_consecutive_invalid_frames: 5
+
+  # Debug-only: draw feature points/trails/motion arrow and the info
+  # text block. Separate from --debug so it can be toggled independently.
+  draw_debug: true
+
+# Phase 4: camera-motion-compensated object velocity. Subtracts the
+# estimated camera/background motion (motion_estimation above) from each
+# tracked object's own raw frame-to-frame pixel velocity, isolating
+# apparent motion caused by the object actually moving from motion caused
+# by the camera/wearer's head turning. In --debug runs this compensated
+# velocity feeds a centralized resolved-motion selection stage (src/
+# motion/motion_resolver.py) and then the motion_filter stage below,
+# which together drive trajectory prediction and the corridor decision
+# (see src/motion/motion_compensator.py). If this whole section is
+# missing, Atlas still starts and runs using the defaults below --
+# unlike motion_estimation above, a missing section here does NOT mean
+# disabled; only an explicit enabled: false does.
+motion_compensation:
+  enabled: true
+  # Minimum motion_estimation confidence required to trust and apply
+  # camera-motion compensation; below this (or if camera motion is
+  # missing/invalid) every object safely falls back to its raw,
+  # uncompensated velocity instead of a possibly-wrong correction.
+  min_camera_confidence: 0.6
+  # Maximum compensated per-axis velocity (pixels/frame) still classified
+  # "stationary" -- mirrors tracking.stationary_threshold_px's convention.
+  stationary_threshold_px: 2.0
+
+# Stationary-motion filtering layer (src/motion/motion_state_filter.py):
+# sits between the resolved motion above and trajectory prediction.
+# Absorbs bounding-box jitter, residual camera-compensation error, and
+# single-frame velocity spikes via a dead-zone + hysteresis + temporal-
+# confirmation state machine, so a genuinely parked vehicle doesn't
+# flicker between STATIONARY and MOVING. All values below are pixels/
+# frame (matching every other velocity value in this config/codebase) or
+# frame counts, and are heuristic/tunable -- not scientifically derived.
+motion_filter:
+  # At/below this smoothed speed, a frame counts as a STATIONARY
+  # candidate; also the "dead zone" -- filtered velocity is zeroed
+  # whenever the confirmed state is STATIONARY. Deliberately set ABOVE
+  # motion_compensation.stationary_threshold_px (2.0) and
+  # trajectory.trajectory_stationary_threshold_px_per_frame (1.5): this
+  # filter's specific job is absorbing MORE residual noise than those
+  # existing single-frame thresholds already tolerate.
+  stationary_enter_speed: 2.5
+  # At/above this smoothed speed, a frame counts as a MOVING candidate.
+  # Must be >= stationary_enter_speed -- the gap between the two is the
+  # hysteresis band: a speed strictly between them counts as neither and
+  # never disturbs the current confirmed state (prevents rapid
+  # alternation between labels).
+  moving_enter_speed: 4.0
+  # Consecutive MOVING-candidate frames required before the confirmed
+  # state actually flips from STATIONARY to MOVING -- a single noisy
+  # frame (or short spike) can never flip the label on its own.
+  moving_confirmation_frames: 5
+  # Consecutive STATIONARY-candidate frames required before the confirmed
+  # state flips back from MOVING to STATIONARY.
+  stationary_confirmation_frames: 5
+  # Minimum position-history samples required before motion is
+  # considered reliable at all; below this, the object is reported
+  # INSUFFICIENT_HISTORY (uncertain) rather than confidently classified.
+  minimum_history_samples: 5
+  # Exponential-smoothing weight on the newest resolved-velocity sample,
+  # applied before the dead-zone/hysteresis check above (same convention
+  # as motion_estimation.smoothing_alpha): 1.0 = no smoothing, closer to
+  # 0 = heavier smoothing (more jitter reduction, slightly more lag).
+  smoothing_alpha: 0.3
+  # When true, a MOVING reading sourced from RAW_FALLBACK (no trustworthy
+  # camera-motion compensation available) is downgraded to UNCERTAIN
+  # rather than shown as a confident moving claim -- raw fallback
+  # velocity can't be trusted to distinguish object motion from
+  # unmeasured camera motion. A genuinely near-zero RAW_FALLBACK reading
+  # is still reported STATIONARY.
+  suppress_raw_motion_during_camera_motion: true
+
+# Canonical Level 1-5 threat classification (src/threat_assessment.py's
+# ThreatAssessmentEngine) -- the SINGLE SOURCE OF TRUTH for threat level
+# and all of its temporal behavior (escalation/de-escalation/persistence/
+# disappearance grace). src/audio/audio_hazard_resolver.py consumes this
+# output directly and is now a stateless translator (wording + audio-only
+# announce_level_1/2 eligibility only) -- it owns no de-escalation timing
+# of its own anymore. Reuses audio.warnings.hazard_levels.approaching_
+# confirmation_frames for Level 3 (CONFIRMED_APPROACH) persistence rather
+# than a second, duplicate setting -- ApproachEstimator already confirms
+# closing motion over multiple frames before ever reporting APPROACHING/
+# APPROACHING_UNCERTAIN. Disabling this section (enabled: false) silences
+# ALL Level 1-5 audio hazard warnings too, since there is deliberately no
+# second, independent classifier to fall back on.
+threat_assessment:
+  enabled: true
+  # Consecutive frames a resolved corridor intersection (confident or
+  # uncertain) must be observed before Level 4 (PATH_CONFLICT) or Level 5
+  # (IMMEDIATE_DANGER) may be reported at all -- a single-frame edge
+  # contact is never sufficient. This is a genuinely new persistence gate:
+  # neither PathIntersectionAnalyzer nor AudioHazardResolver ever had one.
+  # Matches motion_filter's own confirmation-frame convention.
+  path_conflict_confirmation_frames: 3
+  # After a higher level is reported for a track, a lower natural reading
+  # is withheld until this many continuous seconds of lower-risk evidence
+  # have passed -- applies whenever the currently-held level is anything
+  # other than IMMEDIATE_DANGER. This is the ONLY de-escalation-hold
+  # setting in Atlas now (see the removed audio.warnings.hazard_levels.
+  # deescalation_hold_seconds note above) -- not to be confused with
+  # operating_mode.*.highest_danger_repeat_delay_seconds (3.0s), which is
+  # a separate, audio-only concern: whether to re-SPEAK an unchanged
+  # Level-5 episode, not whether the level itself has changed.
+  deescalation_seconds: 0.75
+  # Same, specifically for when the currently-held level is
+  # IMMEDIATE_DANGER -- held longer than the other levels so a brief dip
+  # in evidence doesn't immediately drop the highest-urgency state.
+  immediate_danger_deescalation_seconds: 1.5
+  # How long a track's internal threat-episode state is retained after it
+  # stops appearing in tracked_objects (e.g. a brief occlusion) before
+  # being dropped as stale. Within this window a reappearing track (same
+  # track_id) continues its prior episode rather than restarting cold; no
+  # assessment is produced for a track while it remains absent.
+  disappearance_grace_seconds: 1.0
+
+# Conflict Imminence V1 (src/conflict_imminence.py): a conservative,
+# image-space signal answering "how soon does this object's predicted
+# path affect the pedestrian corridor," expressed in predicted trajectory
+# FRAME-STEPS -- NOT real seconds, NOT physical time-to-collision, and NOT
+# calibrated distance. Atlas has no fixed, reliable frame-to-real-time
+# conversion (measured per-frame processing time fluctuates with system
+# load), so there is deliberately no "seconds" threshold here. Feeds a
+# SECOND, previously-unavailable Level 5 pathway in
+# src/threat_assessment.py (confirmed approach + IMMINENT + persisted
+# corridor conflict) -- it does not change Level 4's definition or the
+# original NEAR-proximity Level 5 pathway. Disabling this section
+# (enabled: false) simply removes that second pathway; the original
+# NEAR + approach + conflict Level 5 pathway is unaffected either way.
+conflict_imminence:
+  enabled: true
+  # A predicted first-conflict-step at or below this many predicted
+  # frames ahead is categorized IMMINENT. Chosen relative to
+  # trajectory.trajectory_prediction_horizon_frames (10 by default) --
+  # roughly the nearest third of the horizon. Heuristic; requires
+  # real-world tuning against real footage, not scientifically derived.
+  imminent_step_frames: 3
+  # A predicted first-conflict-step at or below this many predicted
+  # frames ahead (and above imminent_step_frames) is categorized SOON;
+  # anything further out (but still within the prediction horizon) is
+  # DISTANT. Must be >= imminent_step_frames. Same tuning caveat as above.
+  soon_step_frames: 7
+  # Consecutive frames a candidate status must be the same new value
+  # before it is confirmed at all -- applies uniformly to any status
+  # change. Matches threat_assessment.path_conflict_confirmation_frames's
+  # convention (a single noisy trajectory-velocity fit can't flip this on
+  # its own).
+  confirmation_frames: 3
+  # Once a higher-ranked status has been confirmed and reported, a lower
+  # -ranked reading is withheld until this many continuous real-elapsed
+  # seconds of lower-ranked confirmed evidence have passed. A real
+  # wall-clock hold (like threat_assessment.deescalation_seconds above),
+  # NOT related to the (unavailable) frame-to-seconds conversion this
+  # module deliberately does not perform.
+  deescalation_seconds: 0.75
+  # How long a track's internal imminence state is retained after it
+  # stops appearing in tracked_objects -- mirrors
+  # threat_assessment.disappearance_grace_seconds for consistency.
+  disappearance_grace_seconds: 1.0
+
+# Cinematic startup announcement (spoken via macOS `say`) -- a stylistic
+# system-status announcement only; it must never imply the road is safe
+# or that perception is infallible. See src/audio/startup_announcer.py.
+audio:
+  # General fallbacks, used only where a more specific value (e.g.
+  # startup_announcement.voice below) is unset -- null means "no
+  # override configured," not "explicitly disabled."
+  voice: null
+  rate_wpm: null
+  startup_announcement:
+    enabled: true
+    message: "Atlas online. Detection system activated."
+    # Kept as an explicit setting (matching this project's config-driven
+    # convention) even though only true is currently supported/tested.
+    play_once: true
+    # A brief cinematic beat after readiness before speaking -- not a
+    # network/IO wait.
+    delay_seconds: 0.25
+    # If true, wait for at least one successfully-read frame (in
+    # addition to the camera/perception components already having
+    # initialized) before announcing -- never claim "online" before a
+    # frame has actually been processed.
+    require_first_valid_frame: true
+    # Voice name for the startup announcement specifically (e.g.
+    # "Samantha"). Only ever used if actually installed on this Mac
+    # (checked live via `say -v ?`) -- null means "no specific request,"
+    # falling back through the general voice above, then a preferred
+    # female voice if installed, then the system default.
+    voice: null
+    # Words per minute -- cinematic delivery is slightly slower than
+    # ordinary conversation; ~155-175 wpm, default 165.
+    rate_wpm: 165
+    # Optional local activation sound played immediately before the
+    # spoken message -- disabled by default. Only a user-provided local
+    # file is ever played; Atlas never bundles or downloads a sound.
+    sound_enabled: false
+    sound_path: null
+    sound_volume: 0.7
+
+  # Real-time spoken warnings, built from resolved perception results
+  # only (never raw trajectory/intersection data). See
+  # src/audio/audio_event_builder.py, event_policy.py, speech_queue.py,
+  # audio_worker.py. Runs unconditionally in every mode (normal/--debug/
+  # --validate-compensation) -- CLI flags never change what's computed,
+  # only diagnostics/rendering (matching motion_filter's own convention).
+  warnings:
+    enabled: true
+    # Falls back to the general audio.voice above, then a preferred
+    # female voice if installed, then the system default.
+    voice: null
+    # Slightly brisker than the 165wpm startup line -- still calm and
+    # clear, not alarming.
+    rate_wpm: 170
+    # Minimum seconds between repeating the SAME event (same key --
+    # hazard level, track, and region) -- selected by priority: WARNING
+    # (hazard levels 3-5) is the more urgent tier (shorter cooldown,
+    # re-alerts soonest), INFORMATIONAL (hazard levels 1-2) is the least
+    # urgent (longer cooldown). An escalation/de-escalation to a
+    # different hazard level for the same object is a different key, so
+    # it bypasses whatever cooldown applied to the previous level --
+    # no per-level cooldown table is needed.
+    cooldown_same_event_seconds: 4.0
+    cooldown_informational_seconds: 8.0
+    # Maximum pending (not-yet-spoken) events held at once -- bounded,
+    # never unlimited growth. The single lowest-priority, oldest entry
+    # is evicted first when full.
+    max_queue_size: 5
+    # An event still unspoken after this long is dropped rather than
+    # spoken late.
+    max_event_age_seconds: 3.0
+
+    # Deterministic scene summarization (src/audio/scene_summarizer.py):
+    # sits between AudioEventBuilder and EventPolicy, combining multiple
+    # related per-object candidate events (same priority tier, same
+    # region) into one concise summary -- e.g. "Vehicle and bicycle
+    # approaching from the left." -- instead of several near-identical
+    # utterances. Purely deterministic wording/grouping, no threat
+    # scoring, no generative text. If this whole section is missing,
+    # scene summarization is enabled with the defaults below (same
+    # "missing section = safe defaults" convention as audio.warnings
+    # itself).
+    scene_summary:
+      enabled: true
+      # A bucket smaller than this is never summarized -- passed through
+      # as its original individual event(s) unchanged.
+      minimum_events: 2
+      # Above this many total objects in a bucket, wording switches from
+      # naming each class to a generic count phrase (e.g. "Multiple
+      # vehicles" / "Multiple hazards") to keep the sentence short.
+      max_objects_named: 3
+      # Documents that summarization only ever considers one frame's
+      # candidate batch -- no cross-frame accumulation. Only true is
+      # currently supported.
+      same_frame_only: true
+      # When true, a qualifying same-level bucket is replaced by one
+      # combined event. When false, only the highest hazard level per
+      # region is kept (lower levels still suppressed) but same-level
+      # events are never merged into a named list.
+      prefer_single_summary: true
+      # Spoken as a last-resort WARNING-priority summary when a bucket
+      # qualifies for summarization but can't be safely worded (e.g. an
+      # object's class can't be resolved) -- never silently dropped.
+      fallback_message: "Multiple hazards ahead. Please wait."
+
+  # Five-level deterministic audio hazard system (src/audio/audio_hazard_
+  # resolver.py, src/motion/relative_proximity_estimator.py, src/motion/
+  # approach_estimator.py): combines confirmed filtered motion,
+  # perspective-aware relative proximity, confirmed closing motion, and
+  # resolved corridor conflict into exactly one of 5 spoken hazard
+  # levels. See docs/AUDIO_ALERT_LEVELS.md for the full specification.
+  # If this whole section is missing, hazard levels are enabled with the
+  # defaults below (same "missing section = safe defaults" convention as
+  # every other audio.warnings.* subsection).
+  hazard_levels:
+    enabled: true
+    # Level 1 (far-away movement) and Level 2 (nearby movement, no
+    # confirmed approach) can each be independently silenced -- frequent
+    # far-away/nearby-but-not-closing movement can become noisy in a
+    # busy scene. Levels 3-5 (approaching/path-conflict/high-danger) are
+    # never independently silenced.
+    announce_level_1: true
+    announce_level_2: true
+    # Minimum position-history samples required before approach is
+    # evaluated at all -- below this, NOT_APPROACHING (confident
+    # negative, not evaluated). Matches motion_filter.minimum_history_
+    # samples' own convention/value.
+    minimum_history_samples: 5
+    # Minimum number of the 6 independent closing cues (see
+    # src/motion/approach_estimator.py's module docstring) that must be
+    # true in the same frame to count as a CLOSING candidate --
+    # deliberately >= 2: a single cue (e.g. one-frame bbox growth) is
+    # never enough on its own.
+    minimum_approach_cues: 2
+    # Consecutive CLOSING-candidate frames required before the confirmed
+    # approach state actually flips (and the same count of NOT-CLOSING
+    # frames to flip back) -- a single noisy frame can never flip it.
+    approaching_confirmation_frames: 3
+    # Pixels/frame -- the GROUND_POINT_CLOSING cue requires the derived
+    # bottom-center-y trend to exceed this (positive = moving down-frame
+    # = closer in image space). Heuristic/tunable, not scientifically
+    # derived (same disclaimer convention as motion_estimation's own
+    # heuristic bounds).
+    ground_point_trend_threshold: 0.5
+    # Fractional bbox-area growth per frame -- the SCALE_GROWTH cue
+    # requires the area trend (normalized by mean area over the window)
+    # to exceed this.
+    scale_growth_threshold_fraction: 0.02
+    # Pixels/frame -- the CORRIDOR_DISTANCE_DECREASING cue requires the
+    # distance-to-corridor-centroid trend to be more negative than this.
+    corridor_distance_trend_threshold: 0.5
+    # NOTE: there is deliberately no de-escalation-hold setting here
+    # anymore. AudioHazardResolver used to own a second, independent
+    # per-track de-escalation hold (flat 3.0s for every level) -- removed
+    # as duplicate threat-classification persistence. The canonical,
+    # level-aware hold (0.75s for Levels 1-4, 1.5s for Level 5) now lives
+    # entirely in threat_assessment.* below; AudioHazardResolver is a
+    # stateless translator of ThreatAssessmentEngine's output. This is
+    # NOT the same value as operating_mode.*.highest_danger_repeat_delay_
+    # seconds (3.0s, still present, still separately audio-repetition
+    # timing for re-speaking an unchanged Level-5 episode -- see below).
+
+  # Perspective-aware relative proximity zones (image-relative, NOT
+  # physical meters -- no depth/stereo/GPS input exists anywhere in this
+  # pipeline). Defaults chosen to stay consistent with the existing
+  # pedestrian corridor's own perspective: far_boundary matches
+  # corridor.corridor_top_y, near_boundary sits between the corridor's
+  # top and bottom y, giving a real MID band.
+  proximity:
+    # y-fraction of frame height at/below which an object is FAR.
+    far_boundary: 0.55
+    # y-fraction of frame height at/above which an object is NEAR.
+    # Between far_boundary and near_boundary is MID.
+    near_boundary: 0.80
+
+  # Per-hazard-level spoken delivery: pacing and an optional short local
+  # alert cue. macOS `say` has no clean per-utterance volume/pitch
+  # control (see src/audio/audio_worker.py's module docstring) -- rate
+  # and wording (decided by AudioHazardResolver) carry urgency instead.
+  # cue_path is null by default everywhere: Atlas never bundles or
+  # downloads a sound, and a missing/unset cue file never crashes --
+  # speech plays normally either way.
+  delivery_profiles:
+    level_1:
+      rate_wpm: 170
+      cue_enabled: false
+      cue_path: null
+      cue_gain: 0.0
+    level_2:
+      rate_wpm: 178
+      cue_enabled: false
+      cue_path: null
+      cue_gain: 0.0
+    level_3:
+      rate_wpm: 188
+      cue_enabled: false
+      cue_path: null
+      cue_gain: 0.0
+    level_4:
+      rate_wpm: 195
+      cue_enabled: true
+      cue_path: null
+      cue_gain: 0.75
+    level_5:
+      rate_wpm: 200
+      cue_enabled: true
+      cue_path: null
+      cue_gain: 1.0
+
+# User-selectable operating mode (src/audio/operating_mode_policy.py):
+# filters and reshapes the already-resolved hazard events above -- all
+# three modes share identical perception and hazard-level decisions,
+# only what gets spoken, how often, and in how much detail differs.
+# Selected via --mode on the CLI (overrides `default` below), or
+# `default` here, or "balanced" if neither is set. See
+# docs/OPERATING_MODES.md for the full specification.
+operating_mode:
+  default: balanced
+
+  # Traffic-focused, lowest cognitive load: ordinary pedestrians are
+  # silent (internal person detection/tracking still runs -- only
+  # user-facing announcement is suppressed).
+  minimal:
+    announce_traffic: true
+    announce_people: false
+    highest_danger_repeat_enabled: true
+    highest_danger_repeat_delay_seconds: 3.0
+    highest_danger_max_cycles: 2
+    detailed_scene_summaries: false
+
+  # Traffic plus people only when relevant (close, confirmed
+  # approaching, or crossing the resolved path) -- the default mode.
+  balanced:
+    announce_traffic: true
+    announce_people_when_close: true
+    announce_people_when_approaching: true
+    announce_people_when_crossing_path: true
+    highest_danger_repeat_enabled: true
+    highest_danger_repeat_delay_seconds: 3.0
+    highest_danger_max_cycles: 2
+    detailed_scene_summaries: false
+
+  # Full structured environmental awareness: broader pedestrian
+  # context, concise multi-object summaries. Highest-danger warnings
+  # play once per unchanged episode -- no automatic repeat, since
+  # Detailed mode already carries more audio load than the other two.
+  detailed:
+    announce_traffic: true
+    announce_people: true
+    structured_scene_summaries: true
+    max_summary_object_groups: 2
+    max_summary_words: 15
+    highest_danger_repeat_enabled: false
+    highest_danger_max_cycles: 1
+
+# Critical system-health audio (src/system/system_health_monitor.py):
+# exactly four spoken messages -- "Warning! Camera blocked.", "Warning!
+# Camera feed lost.", "Warning! Detection unavailable.", "Detection
+# restored." -- identical across Minimal/Balanced/Detailed. Every
+# confirmation/threshold value here is genuinely used; see
+# docs/SYSTEM_HEALTH_AUDIO.md for exact rationale.
+system_health:
+  enabled: true
+
+  camera_blocked:
+    # Consecutive seconds a frame must look blocked (low Laplacian
+    # variance AND low Canny edge density) before CAMERA_BLOCKED is
+    # confirmed -- never from one dark/uniform frame.
+    confirmation_seconds: 1.5
+    # Laplacian-variance threshold below which a frame is "too flat".
+    variance_threshold: 50.0
+    # Canny edge-density (fraction of edge pixels) threshold below
+    # which a frame is "too featureless".
+    edge_density_threshold: 0.02
+
+  camera_feed_lost:
+    # Consecutive failed reads on a LIVE source before CAMERA_FEED_LOST
+    # is confirmed. A video file reaching normal EOF never counts here
+    # -- see VideoSource.is_live_source().
+    consecutive_failed_reads: 3
+
+  detection_unavailable:
+    # Consecutive detector-call failures (exceptions) before
+    # DETECTION_UNAVAILABLE is confirmed. An empty detection list is
+    # never a failure.
+    consecutive_failures: 3
+
+  # Minimum seconds after a failure message was spoken before one
+  # repeat may be spoken, if the same failure is still active.
+  failure_repeat_seconds: 5.0
+  # Maximum times the same uninterrupted failure episode may be spoken
+  # in total (including the first) -- never a third repeat.
+  failure_max_cycles: 2
+  # Consecutive seconds the system must be HEALTHY after a spoken
+  # failure before "Detection restored." is spoken, once.
+  recovery_confirmation_seconds: 1.5

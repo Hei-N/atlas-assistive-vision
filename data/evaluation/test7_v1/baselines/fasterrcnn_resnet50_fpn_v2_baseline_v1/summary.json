@@ -1,0 +1,37 @@
+{
+  "observational_baseline": true,
+  "processed_frames": 35,
+  "total_detections": 244,
+  "detections_per_class": {
+    "bicycle": 5,
+    "bus": 11,
+    "car": 195,
+    "motorcycle": 1,
+    "person": 20,
+    "truck": 12
+  },
+  "mean_confidence_by_class": {
+    "car": 0.8721,
+    "person": 0.6683,
+    "bus": 0.8435,
+    "bicycle": 0.936,
+    "motorcycle": 0.6178,
+    "truck": 0.6303
+  },
+  "median_confidence_by_class": {
+    "car": 0.9614,
+    "person": 0.6102,
+    "bus": 0.9293,
+    "bicycle": 0.9543,
+    "motorcycle": 0.6178,
+    "truck": 0.5647
+  },
+  "average_detections_per_frame": 6.9714,
+  "mean_inference_time_ms": 3754.9464,
+  "median_inference_time_ms": 3778.8233,
+  "p95_inference_time_ms": 4038.7611,
+  "mean_total_frame_time_ms": 3754.9637,
+  "effective_processing_fps": 0.2663,
+  "source_fps": 59.91214805213509,
+  "real_time_factor": 0.0044
+}

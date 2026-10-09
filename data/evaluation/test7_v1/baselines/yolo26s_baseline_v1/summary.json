@@ -1,0 +1,118 @@
+{
+  "observational_baseline": true,
+  "requires_ground_truth_for": [
+    "precision",
+    "recall",
+    "f1_score",
+    "mean_average_precision",
+    "missed_object_rate",
+    "false_positive_rate",
+    "detection_accuracy"
+  ],
+  "protected_classes": [
+    "car",
+    "bus",
+    "truck"
+  ],
+  "priority_classes": [
+    "bicycle",
+    "motorcycle"
+  ],
+  "total_frames": 4105,
+  "processed_frames": 35,
+  "failed_frames": 0,
+  "total_detections": 108,
+  "detections_per_raw_class": {
+    "bicycle": 0,
+    "bus": 5,
+    "car": 99,
+    "motorcycle": 0,
+    "person": 3,
+    "truck": 1
+  },
+  "detections_per_normalized_class": {
+    "Bicycle": 0,
+    "Motorcycle": 0,
+    "Person": 3,
+    "Vehicle": 105
+  },
+  "mean_confidence_by_raw_class": {
+    "bicycle": null,
+    "bus": 0.8111,
+    "car": 0.7335,
+    "motorcycle": null,
+    "person": 0.611,
+    "truck": 0.8434
+  },
+  "median_confidence_by_raw_class": {
+    "bicycle": null,
+    "bus": 0.8395,
+    "car": 0.7348,
+    "motorcycle": null,
+    "person": 0.6171,
+    "truck": 0.8434
+  },
+  "confidence_quantiles_by_raw_class": {
+    "bicycle": {
+      "p25": null,
+      "p50": null,
+      "p75": null,
+      "p90": null
+    },
+    "bus": {
+      "p25": 0.7684,
+      "p50": 0.8395,
+      "p75": 0.8596,
+      "p90": 0.8729
+    },
+    "car": {
+      "p25": 0.6546,
+      "p50": 0.7348,
+      "p75": 0.83,
+      "p90": 0.8773
+    },
+    "motorcycle": {
+      "p25": null,
+      "p50": null,
+      "p75": null,
+      "p90": null
+    },
+    "person": {
+      "p25": 0.5738,
+      "p50": 0.6171,
+      "p75": 0.6512,
+      "p90": 0.6717
+    },
+    "truck": {
+      "p25": 0.8434,
+      "p50": 0.8434,
+      "p75": 0.8434,
+      "p90": 0.8434
+    }
+  },
+  "average_detections_per_frame": 3.0857,
+  "percent_frames_containing_class": {
+    "bicycle": 0.0,
+    "bus": 14.2857,
+    "car": 91.4286,
+    "motorcycle": 0.0,
+    "person": 5.7143,
+    "truck": 2.8571
+  },
+  "mean_inference_time_ms": 46.6293,
+  "median_inference_time_ms": 41.7738,
+  "p95_inference_time_ms": 71.3539,
+  "mean_total_frame_time_ms": 46.6309,
+  "effective_processing_fps": 21.445,
+  "source_fps": 59.9121,
+  "real_time_factor": 0.3579,
+  "frame_time_budget_ms": 16.6911,
+  "frames_exceeding_frame_time_budget": 35,
+  "temporal_consistency_proxies": {
+    "note": "Conservative, detector-only proxies from simple adjacent-frame IoU association local to this benchmark tool -- NOT identity tracking, NOT ObjectTracker. Multi-frame reappearance/gap proxies are out of scope for this milestone; see docs/DETECTOR_BENCHMARK.md.",
+    "class_count_delta_events_proxy": 26,
+    "high_confidence_disappearance_count_proxy": 17,
+    "same_region_class_switch_count_proxy": 0,
+    "mean_confidence_variation_for_matched_boxes_proxy": 0.0712
+  }
+}

@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+venv/
+.venv/
+*.egg-info/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Environment and secrets
+.env
+.env.*
+
+# Model weights (downloaded by Ultralytics / torchvision at first use)
+*.pt
+*.pth
+*.onnx
+*.engine
+
+# Runtime outputs
+logs/*
+!logs/.gitkeep
+data/output/*
+!data/output/.gitkeep
+
+# Input video and personal footage
+data/input/*
+!data/input/.gitkeep
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.m4v
+
+# Evaluation data derived from personal footage (kept local)
+data/evaluation/*/frames/
+data/evaluation/*/review_sheets/
+data/evaluation/*/contact_sheet.jpg
+data/evaluation/*/chatgpt_review_package/
+data/evaluation/*/chatgpt_review_package.zip
+data/evaluation/*/annotations_claude_draft.json
+data/evaluation/*/annotations_prebaseline_empty.json
+data/evaluation/*/annotation_working_template.json
+data/evaluation/*/baselines/*/detections.csv
+data/evaluation/*/baselines/*/matched_detections.csv
+
+# Dataset footage and extracted frames
+data/datasets/*/raw/*
+!data/datasets/*/raw/README.md
+data/datasets/*/selected_frames/*
+!data/datasets/*/selected_frames/README.md
+
+# PyInstaller build output
+build/
+dist/
+Atlas-macOS-arm64.zip
